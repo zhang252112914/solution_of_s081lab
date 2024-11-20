@@ -18,7 +18,7 @@ int fstat(int fd, struct stat*);
 int link(const char*, const char*);
 int mkdir(const char*);
 int chdir(const char*);
-int dup(int);
+int dup(int); 
 int getpid(void);
 char* sbrk(int);
 int sleep(int);
