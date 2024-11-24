@@ -8,6 +8,7 @@
 
 struct cpu cpus[NCPU];
 
+//the proc array record all the process
 struct proc proc[NPROC];
 
 struct proc *initproc;
@@ -280,6 +281,8 @@ fork(void)
   if((np = allocproc()) == 0){
     return -1;
   }
+
+  np->mask = p->mask;
 
   // Copy user memory from parent to child.
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
@@ -653,4 +656,20 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+uint64 
+get_used_proc(void)
+{
+  struct proc *p;
+  uint64 num = 0;
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->state != UNUSED)
+    {
+      num++;
+    }
+    release(&p->lock);
+  }
+  return num;
 }

@@ -20,7 +20,7 @@ struct run {
 
 struct {
   struct spinlock lock;
-  struct run *freelist;
+  struct run *freelist;   //the "free" here is a adj not a noun
 } kmem;
 
 void
@@ -79,4 +79,20 @@ kalloc(void)
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
+}
+
+uint64
+get_freemem(void)
+{
+  struct run *r;
+  uint64 count = 0;
+  acquire(&kmem.lock);
+  r = kmem.freelist;
+  while(r)
+  {
+    r = r->next;
+    count+=PGSIZE;
+  }
+  release(&kmem.lock);
+  return count;
 }

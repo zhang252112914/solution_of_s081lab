@@ -22,6 +22,6 @@ main(int argc, char *argv[])
   for(i = 2; i < argc && i < MAXARG; i++){
     nargv[i-2] = argv[i];
   }
-  exec(nargv[0], nargv);
+  exec(nargv[0], nargv);  //run the target process
   exit(0);
 }

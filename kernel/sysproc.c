@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
 
 uint64
 sys_exit(void)
@@ -94,4 +95,40 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+uint64
+sys_trace(void)
+{
+  int mask;
+  // we use argint, because the expected arg is an integer
+  if(argint(0, &mask) < 0){
+    return -1;
+  }
+  else{
+    myproc()->mask = mask;
+    return 0;
+  }
+}
+
+uint64
+sys_sysinfo(void)
+{
+  //the given parameter of struct sysinfo is actually the virtual memory of the target place
+  //and myproc() function can get the pagetable pointer
+  //and the src comes from what?
+  //the exact byte is the size of the struct sysinfo
+  //thus we can use the copyout function to return the result from kernel to the user space(more accurate, is the sysinfo pointer the caller provided before)
+  uint64 target_addr;
+  if(argaddr(0, &target_addr)){
+    return -1;
+  }
+  struct sysinfo info;
+  info.freemem = get_freemem();
+  info.nproc = get_used_proc();
+
+  if(copyout(myproc()->pagetable, target_addr, (char *) &info, sizeof(struct sysinfo)) < 0){
+    return -1;
+  }
+  return 0;
 }
