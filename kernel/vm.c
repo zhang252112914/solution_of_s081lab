@@ -82,9 +82,9 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
 {
   if(va >= MAXVA)
     panic("walk");
-
+  //a loop to decode the va
   for(int level = 2; level > 0; level--) {
-    pte_t *pte = &pagetable[PX(level, va)];
+    pte_t *pte = &pagetable[PX(level, va)];  //get the PTE
     if(*pte & PTE_V) {
       pagetable = (pagetable_t)PTE2PA(*pte);
     } else {
@@ -123,6 +123,7 @@ walkaddr(pagetable_t pagetable, uint64 va)
 // add a mapping to the kernel page table.
 // only used when booting.
 // does not flush TLB or enable paging.
+//perm表示的是内存其权限
 void
 kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 {
@@ -143,8 +144,8 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   if(size == 0)
     panic("mappages: size");
   
-  a = PGROUNDDOWN(va);
-  last = PGROUNDDOWN(va + size - 1);
+  a = PGROUNDDOWN(va);   //align
+  last = PGROUNDDOWN(va + size - 1);   //align, too
   for(;;){
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;

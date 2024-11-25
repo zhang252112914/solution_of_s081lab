@@ -195,7 +195,7 @@ w_pmpaddr0(uint64 x)
 
 // use riscv's sv39 page table scheme.
 #define SATP_SV39 (8L << 60)
-
+//it seems pick the highest 27 bits as the offset of a PT
 #define MAKE_SATP(pagetable) (SATP_SV39 | (((uint64)pagetable) >> 12))
 
 // supervisor address translation and protection;
@@ -350,12 +350,12 @@ sfence_vma()
 
 #define PTE2PA(pte) (((pte) >> 10) << 12)
 
-#define PTE_FLAGS(pte) ((pte) & 0x3FF)
+#define PTE_FLAGS(pte) ((pte) & 0x3FF) //get the lowest 10 bits of the PTE, because it is the flags
 
 // extract the three 9-bit page table indices from a virtual address.
 #define PXMASK          0x1FF // 9 bits
 #define PXSHIFT(level)  (PGSHIFT+(9*(level)))
-#define PX(level, va) ((((uint64) (va)) >> PXSHIFT(level)) & PXMASK)
+#define PX(level, va) ((((uint64) (va)) >> PXSHIFT(level)) & PXMASK)  //actually get the target level VPN
 
 // one beyond the highest possible virtual address.
 // MAXVA is actually one bit less than the max allowed by

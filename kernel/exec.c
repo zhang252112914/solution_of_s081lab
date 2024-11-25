@@ -16,9 +16,9 @@ exec(char *path, char **argv)
   int i, off;
   uint64 argc, sz = 0, sp, ustack[MAXARG], stackbase;
   struct elfhdr elf;
-  struct inode *ip;
-  struct proghdr ph;
-  pagetable_t pagetable = 0, oldpagetable;
+  struct inode *ip;  // ip is the file's inode, storing the basic information of a file
+  struct proghdr ph;  // ph is the program section header
+  pagetable_t pagetable = 0, oldpagetable; 
   struct proc *p = myproc();
 
   begin_op();
