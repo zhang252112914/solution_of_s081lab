@@ -217,6 +217,9 @@ uvminit(pagetable_t pagetable, uchar *src, uint sz)
 
 // Allocate PTEs and physical memory to grow process from oldsz to
 // newsz, which need not be page aligned.  Returns new size or 0 on error.
+// an aoverall description of this process: get a physical address, then create a
+// virtual page table entry for the phyysical address, then map the virtual address
+// to the physical address.
 uint64
 uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 {
@@ -431,4 +434,39 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+//this function is helpeted to print out the entry in assigned format
+
+static inline void
+vmprint_content(int i, pte_t pte, int level)
+{
+  uint64 pa = PTE2PA(pte);
+  if(level == 0) printf("..");
+  else if(level == 1) printf(".. ..");
+  else if(level == 2) printf(".. .. ..");
+  printf("%d: pte %p pa %p\n", i, pte, pa);
+}
+
+void
+vmprint_level(pagetable_t pagetable, int level)
+{
+  if(level == 0) printf("page table %p\n", pagetable);
+
+  pte_t pte;
+  for(int i = 0; i < 512; i++){
+    pte = pagetable[i];
+    if(pte & PTE_V){
+      vmprint_content(i, pte, level);
+      if((pte&(PTE_R|PTE_W|PTE_X)) == 0){
+        //this entry points to a next-level pagetable
+        vmprint_level((pagetable_t)PTE2PA(pte), level+1);
+      }
+    }
+  }
+}
+
+void
+vmprint(pagetable_t pagetable){
+  vmprint_level(pagetable, 0);
 }

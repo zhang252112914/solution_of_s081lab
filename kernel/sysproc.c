@@ -77,10 +77,33 @@ sys_sleep(void)
 
 
 #ifdef LAB_PGTBL
+
+extern pte_t* walk(pagetable_t, uint64, int);extern pte_t* walk(pagetable_t, uint64, int);
+
 int
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
+  int check_num;
+  if(argint(1, &check_num) < 0) return -1;
+  if(check_num > MAXSCAN) return -1;
+  uint64 va_to_check;
+  if(argaddr(0, &va_to_check) < 0) return -1;
+  uint64 dest;
+  if(argaddr(2, &dest) < 0) return -1;
+
+  pte_t* pte;
+  unsigned int bitmask = 0;
+  for(int i = 0; i < check_num; i++, va_to_check+=PGSIZE){
+    if((pte = walk(myproc()->pagetable, va_to_check, 0)) == 0) panic("pgaceess : walk failed");
+
+    if(*pte & PTE_A){
+      bitmask |= 1 << i;
+      *pte &= ~PTE_A;
+    }
+  }
+
+  if(copyout(myproc()->pagetable, dest, (char*)&bitmask, sizeof(bitmask))<0) return -1;
   return 0;
 }
 #endif
