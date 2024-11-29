@@ -77,8 +77,14 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2){
+    if(p->interval != 0 && p->ticks == p->interval){
+      *p->pre_trapframe = *p->trapframe;  //注意要是实例赋值啊，千万不能用指针赋值，不然实际上指针指向的是同一个，即原本的trapframe
+      p->trapframe->epc = p->handler;
+    }
+    p->ticks++;
     yield();
+  }
 
   usertrapret();
 }

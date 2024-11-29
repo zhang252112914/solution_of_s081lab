@@ -52,7 +52,7 @@ test0()
     if(count > 0)
       break;
   }
-  sigalarm(0, 0);
+  sigalarm(0, 0); //resume the alarm settings
   if(count > 0){
     printf("test0 passed\n");
   } else {

@@ -121,6 +121,7 @@ panic(char *s)
   printf("panic: ");
   printf(s);
   printf("\n");
+  backtrace();
   panicked = 1; // freeze uart output from other CPUs
   for(;;)
     ;
@@ -131,4 +132,16 @@ printfinit(void)
 {
   initlock(&pr.lock, "pr");
   pr.locking = 1;
+}
+
+void
+backtrace()
+{
+  printf("backtrace:\n");
+  uint64 fp = r_fp();   //get currently used frame pointer(I think it is an virtual address, I need corresponding page table to interpret it)
+  uint64 top = PGROUNDUP(fp);
+  for(; fp < top; fp = *(uint64 *)(fp - 16))
+  {
+    printf("%p\n", *(uint64 *)(fp-8));
+  }
 }

@@ -1,0 +1,6 @@
+a0-a7, a2
+There is no corresponding code to the function f and g. The main inline this to function and complete the calculation during the assemblying process.
+0x00000616
+0x38
+He110 World, inverse
+the output is defined by the concurrent value in the a2 register

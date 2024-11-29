@@ -61,6 +61,7 @@ uservec:
         sd t6, 280(a0)
 
 	# save the user a0 in p->trapframe->a0
+        # because the sscratch has changed its contents with a0, so the contents of sscratch is a0
         csrr t0, sscratch
         sd t0, 112(a0)
 
