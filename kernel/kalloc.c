@@ -18,9 +18,11 @@ struct run {
   struct run *next;
 };
 
+// according to a block, the ref would be better to be placed at the keme, because it also need a lock, and it also has a tight relationship with the phsical memory 
 struct {
   struct spinlock lock;
   struct run *freelist;
+  int ref_count[(PHYSTOP - KERNBASE) / PGSIZE];
 } kmem;
 
 void
@@ -35,8 +37,12 @@ freerange(void *pa_start, void *pa_end)
 {
   char *p;
   p = (char*)PGROUNDUP((uint64)pa_start);
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
+  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE){
+    acquire(&kmem.lock);
+    kmem.ref_count[((uint64)p - KERNBASE) / PGSIZE] = 1;  //because in kfree would call decre_ref to each one, so this should be initialized as 1
+    release(&kmem.lock);
     kfree(p);
+  }
 }
 
 // Free the page of physical memory pointed at by v,
@@ -52,13 +58,15 @@ kfree(void *pa)
     panic("kfree");
 
   // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
-
-  r = (struct run*)pa;
 
   acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
+  if(--kmem.ref_count[((uint64)pa - KERNBASE) / PGSIZE] == 0){
+    memset(pa, 1, PGSIZE);
+    r = (struct run*)pa;
+    
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+  }
   release(&kmem.lock);
 }
 
@@ -72,11 +80,40 @@ kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r){
+    kmem.ref_count[((uint64)r - KERNBASE) / PGSIZE] = 1;
     kmem.freelist = r->next;
+  }
   release(&kmem.lock);
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
+}
+
+//expect pa is the start of a page
+void
+incre_ref(uint64 pa)
+{
+  acquire(&kmem.lock);
+  kmem.ref_count[(pa - KERNBASE) / PGSIZE]++;
+  release(&kmem.lock);
+}
+
+void
+decre_ref(uint64 pa)
+{
+  acquire(&kmem.lock);
+  kmem.ref_count[(pa - KERNBASE) / PGSIZE]--;
+  if(kmem.ref_count[(pa - KERNBASE) / PGSIZE] < 0) panic("wrong kfree cause ref decresed to negative");
+  release(&kmem.lock);
+}
+
+int
+get_ref(uint64 pa){
+  int ref;
+  acquire(&kmem.lock);
+  ref = kmem.ref_count[(pa - KERNBASE) / PGSIZE];
+  release(&kmem.lock);
+  return ref;
 }

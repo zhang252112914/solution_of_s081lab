@@ -1,0 +1,18 @@
+initially, parent and child share the same pgtbl
+all the PTEs in the pgtbl marked unwritble
+create only a new page when the pg need to be modified
+when free a process, a page having multiple refrence(PTE), should be freed only when the last refrence to it ends
+
+
+paln of attack:
+M the uvmcopy to implement parent and child share the same physica mem (remember clear the PTE_W in the PTEs) ( completed in kernel/vm.c uvmcopy )
+
+M usertrap handle write problem (actually is page fault) ( completed )
+
+free problem ( the method mentioned in the document is keep a count to each page, and as the words said, I can keep it in a global array(index every number by the page physical address ÷ PGSIZE))  ( completed in kernel/kalloc.c )
+
+M the copyout when it meets a page fault as before. ( completed )
+
+when handling a page fault not caused by the COW page, the process should be killed ( completed )
+
+use the RSW bit to mark the COW page for checking in some process ( completed (kernel/riscv.h) )

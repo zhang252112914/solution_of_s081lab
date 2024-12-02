@@ -29,6 +29,41 @@ trapinithart(void)
   w_stvec((uint64)kernelvec);
 }
 
+int
+pagefault_handler(uint64 va, pagetable_t pgtbl)
+{
+  pte_t *pte;
+  if((pte = walk(pgtbl, va, 0)) == 0) return -1;
+  
+  //judge if it is another type of page fault
+  if(!(*pte & PTE_COW) || !(*pte & PTE_V)) return -1;
+
+  uint64 pa = PTE2PA(*pte);
+  if(pa == 0) return -1;
+
+  *pte |= PTE_W;
+
+  if(get_ref(pa) == 1){
+    *pte &= ~PTE_COW;
+  }
+  else{
+    char *mem;
+    uint flags = PTE_FLAGS(*pte);
+    if((mem = kalloc()) == 0) return -1;
+    memmove(mem, (char *)pa, PGSIZE);
+    if(mem == 0) return -1;
+    *pte &= ~PTE_V;    // the xv6 actually not allow remapping(confirm by checking v), but indeed we need remap, so we need a little tricks to avoid the checks
+    if(mappages(pgtbl, va, PGSIZE, (uint64)mem, flags) != 0){
+      *pte |= PTE_V;     
+      kfree(mem);
+      return -1;
+    }
+    kfree((char*)PGROUNDDOWN(pa));  // release the overlapping pte before(I forgot it)
+  }
+
+  return 0;
+}
+
 //
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
@@ -67,7 +102,16 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  }
+
+  else if(r_scause() == 15){
+    uint64 fault_va = r_stval();
+    if(fault_va > p->sz || pagefault_handler(PGROUNDDOWN(fault_va), p->pagetable) < 0){
+      p->killed = 1;
+    }
+  }
+
+  else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;

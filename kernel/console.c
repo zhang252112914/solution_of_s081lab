@@ -76,6 +76,7 @@ consolewrite(int user_src, uint64 src, int n)
 // user_dist indicates whether dst is a user
 // or kernel address.
 //
+//actually the loop in consoleread only read one character a time.
 int
 consoleread(int user_dst, uint64 dst, int n)
 {

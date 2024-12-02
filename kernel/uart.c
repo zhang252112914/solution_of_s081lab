@@ -49,6 +49,7 @@ extern volatile int panicked; // from printf.c
 
 void uartstart();
 
+//seems just complete arranging the address of the register?
 void
 uartinit(void)
 {
