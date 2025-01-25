@@ -78,7 +78,7 @@ mycpu(void) {
 // Return the current struct proc *, or zero if none.
 struct proc*
 myproc(void) {
-  push_off();
+  push_off();  //
   struct cpu *c = mycpu();
   struct proc *p = c->proc;
   pop_off();
@@ -360,7 +360,7 @@ exit(int status)
 
   acquire(&wait_lock);
 
-  // Give any children to init.
+  // Give any children to init (if it dose have).
   reparent(p);
 
   // Parent might be sleeping in wait().
@@ -387,7 +387,7 @@ wait(uint64 addr)
   int havekids, pid;
   struct proc *p = myproc();
 
-  acquire(&wait_lock);
+  acquire(&wait_lock);  // here wait_lock acts as a condition lock, ensuring that the parent process will not miss the child's exit
 
   for(;;){
     // Scan through table looking for exited children.
@@ -446,7 +446,10 @@ scheduler(void)
     intr_on();
 
     for(p = proc; p < &proc[NPROC]; p++) {
-      acquire(&p->lock);
+      acquire(&p->lock);  // here I met a problem:
+      // 在yield中，acquire了lock，但是其跳转去了sched，在sched中又跳转到了swtch.S中的swtch函数，swtch函数保存状态后又会跳转到scheduler中，scheduler在loop的过程中不断尝试acquire p->lock，但此时的p->lock并未被释放啊？应该要等到yield返回的时候才会释放这个锁，这不就造成死锁了吗？
+      // 以下是解答：
+      // 要注意跳入scheduler的位置，上一个程序是在下面的swtch的地方开始执行的，所以再次跳入是从其下方开始进入，也就是说将会经过一个release
       if(p->state == RUNNABLE) {
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
@@ -487,7 +490,7 @@ sched(void)
     panic("sched interruptible");
 
   intena = mycpu()->intena;
-  swtch(&p->context, &mycpu()->context);
+  swtch(&p->context, &mycpu()->context);  //one is the running process's context and another is the scheduler's context stored in the cpu struct
   mycpu()->intena = intena;
 }
 
@@ -538,8 +541,12 @@ sleep(void *chan, struct spinlock *lk)
   // so it's okay to release lk.
 
   acquire(&p->lock);  //DOC: sleeplock1
-  release(lk);
-
+  release(lk);       // we need to acquire the p->lock first and the release the condition lock
+                    // because it is just like a relay, the wake-up also need p->lock, so the p->lock can also work as another condition lock
+                    // and the p->lock when sched
+                    // why we need several locks? as though p->lock seems can constrain both of sleep and wake-up
+                    // because it increase the concurrency, condition lock shrink the time one thread control the shared resources
+                    // 很多时候wake-up和sleep并不是一一对应的。共享资源不止在两者之间访问，还可能有第三者要访问
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
@@ -550,7 +557,8 @@ sleep(void *chan, struct spinlock *lk)
   p->chan = 0;
 
   // Reacquire original lock.
-  release(&p->lock);
+  release(&p->lock);  // the lock release before will be resumed from here
+  // It also sparks that when the caller of sleep is waken up, the first point it resumes is at the sleep(it is reasonable that the original caller is stuck in sleep, where it gives up the cpu)
   acquire(lk);
 }
 

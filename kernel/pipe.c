@@ -113,7 +113,7 @@ piperead(struct pipe *pi, uint64 addr, int n)
   while(pi->nread == pi->nwrite && pi->writeopen){  //DOC: pipe-empty
     if(pr->killed){
       release(&pi->lock);
-      return -1;
+      return -1;  
     }
     sleep(&pi->nread, &pi->lock); //DOC: piperead-sleep
   }
