@@ -5,8 +5,8 @@
 #include <pthread.h>
 #include <sys/time.h>
 
-#define NBUCKET 5
-#define NKEYS 100000
+#define NBUCKET 10
+#define NKEYS 100000  // the number of keys need to be inserted
 
 struct entry {
   int key;
@@ -16,6 +16,7 @@ struct entry {
 struct entry *table[NBUCKET];
 int keys[NKEYS];
 int nthread = 1;
+pthread_mutex_t locks[NBUCKET];
 
 
 double
@@ -39,7 +40,7 @@ insert(int key, int value, struct entry **p, struct entry *n)
 static 
 void put(int key, int value)
 {
-  int i = key % NBUCKET;
+  int i = key % NBUCKET;  // find the bucket index
 
   // is the key already present?
   struct entry *e = 0;
@@ -47,6 +48,7 @@ void put(int key, int value)
     if (e->key == key)
       break;
   }
+  pthread_mutex_lock(&locks[i]);
   if(e){
     // update the existing key.
     e->value = value;
@@ -54,7 +56,7 @@ void put(int key, int value)
     // the new is new.
     insert(key, value, &table[i], table[i]);
   }
-
+  pthread_mutex_unlock(&locks[i]);
 }
 
 static struct entry*
@@ -75,7 +77,7 @@ static void *
 put_thread(void *xa)
 {
   int n = (int) (long) xa; // thread number
-  int b = NKEYS/nthread;
+  int b = NKEYS/nthread;   // the number of insert should this thread do
 
   for (int i = 0; i < b; i++) {
     put(keys[b*n + i], n);
@@ -110,12 +112,17 @@ main(int argc, char *argv[])
     fprintf(stderr, "Usage: %s nthreads\n", argv[0]);
     exit(-1);
   }
-  nthread = atoi(argv[1]);
+  nthread = atoi(argv[1]);   // get the number of threads from arguements
   tha = malloc(sizeof(pthread_t) * nthread);
   srandom(0);
   assert(NKEYS % nthread == 0);
-  for (int i = 0; i < NKEYS; i++) {
+  for (int i = 0; i < NKEYS; i++) {  // generate random keys in the array
     keys[i] = random();
+  }
+
+  // initialize the locks
+  for(int i = 0; i < NBUCKET; i++){
+    pthread_mutex_init(&locks[i], NULL);
   }
 
   //
