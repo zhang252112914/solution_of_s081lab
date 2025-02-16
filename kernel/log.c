@@ -211,6 +211,7 @@ commit()
 //   modify bp->data[]
 //   log_write(bp)
 //   brelse(bp)
+//the log_write only modify the log_header, and the real write to disk is done by commit()
 void
 log_write(struct buf *b)
 {
@@ -223,12 +224,12 @@ log_write(struct buf *b)
     panic("log_write outside of trans");
 
   for (i = 0; i < log.lh.n; i++) {
-    if (log.lh.block[i] == b->blockno)   // log absorption
+    if (log.lh.block[i] == b->blockno)   // log absorption (means merge the same block)
       break;
   }
   log.lh.block[i] = b->blockno;
   if (i == log.lh.n) {  // Add new block to log?
-    bpin(b);
+    bpin(b);  // make sure the target block rest in the cache so that afterwards we can copy it to log
     log.lh.n++;
   }
   release(&log.lock);

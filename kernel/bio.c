@@ -44,7 +44,7 @@ binit(void)
   bcache.head.prev = &bcache.head;
   bcache.head.next = &bcache.head;
   for(b = bcache.buf; b < bcache.buf+NBUF; b++){
-    b->next = bcache.head.next;
+    b->next = bcache.head.next;    //头插法
     b->prev = &bcache.head;
     initsleeplock(&b->lock, "buffer");
     bcache.head.next->prev = b;
@@ -67,10 +67,11 @@ bget(uint dev, uint blockno)
     if(b->dev == dev && b->blockno == blockno){
       b->refcnt++;
       release(&bcache.lock);
-      acquiresleep(&b->lock);
+      acquiresleep(&b->lock);  //if the block is being used, then sleep
       return b;
     }
   }
+  // the sleep-lock protects reads and writes of the block's buffered content, while the bcache.lock protects information about which blocks are cached.
 
   // Not cached.
   // Recycle the least recently used (LRU) unused buffer.
@@ -78,7 +79,7 @@ bget(uint dev, uint blockno)
     if(b->refcnt == 0) {
       b->dev = dev;
       b->blockno = blockno;
-      b->valid = 0;
+      b->valid = 0;    // empty the block and ensure the data will be read from disk2
       b->refcnt = 1;
       release(&bcache.lock);
       acquiresleep(&b->lock);
@@ -129,9 +130,11 @@ brelse(struct buf *b)
     b->prev->next = b->next;
     b->next = bcache.head.next;
     b->prev = &bcache.head;
-    bcache.head.next->prev = b;
-    bcache.head.next = b;
-  }
+    bcache.head.next->prev = b;    //put the empty buffer to the head of the list?
+    bcache.head.next = b;         //but why? According the bget, the search is from the tail to the head.
+  }                           //here is the answer: refcnt == 0 isn't equal to the buffer is useless, it just means no one is using it now.
+                            // and the LRU principle make the search from tail to head. So the recently used buffer (although no ref) is reasonable to be put in the head.
+                            // naturally, the least recently used buffer will be gathered in the tail.
   
   release(&bcache.lock);
 }

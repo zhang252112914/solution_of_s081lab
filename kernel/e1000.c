@@ -59,7 +59,7 @@ e1000_init(uint32 *xregs)
       panic("e1000");
     rx_ring[i].addr = (uint64) rx_mbufs[i]->head;
   }
-  regs[E1000_RDBAL] = (uint64) rx_ring;
+  regs[E1000_RDBAL] = (uint64) rx_ring; // the base address of the receive descriptor ring
   if(sizeof(rx_ring) % 128 != 0)
     panic("e1000");
   regs[E1000_RDH] = 0;
@@ -102,10 +102,34 @@ e1000_transmit(struct mbuf *m)
   // the TX descriptor ring so that the e1000 sends it. Stash
   // a pointer so that it can be freed after sending.
   //
+  uint32 tail;
+  struct tx_desc *tran_desc;
+
+  acquire(&e1000_lock);
+  tail = regs[E1000_TDT];
+  tran_desc = &tx_ring[tail];
+
+  if(!(tran_desc->status & E1000_TXD_STAT_DD)){ // the tail isn't empty (full and is transmitting)
+    release(&e1000_lock);
+    return -1;
+  }
   
+  if(tx_mbufs[tail]){
+    mbuffree(tx_mbufs[tail]);
+  }
+  tran_desc->addr = (uint64)m->head;
+  tran_desc->length = m->len;
+  tran_desc->cmd = E1000_TXD_CMD_RS | E1000_TXD_CMD_EOP; // In xv6, a packet won't be transmitted in multiple descriptor, so every descriptor need to set the EOF flag
+  tx_mbufs[tail] = m;
+  __sync_synchronize();
+  regs[E1000_TDT] = (tail + 1) % TX_RING_SIZE;
+  release(&e1000_lock);
+
   return 0;
 }
 
+// there is only one process will call e1000_recv, it's the network dirver,
+//so there won't be race condition
 static void
 e1000_recv(void)
 {
@@ -115,6 +139,25 @@ e1000_recv(void)
   // Check for packets that have arrived from the e1000
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
+  uint32 tail = (regs[E1000_RDT] + 1) % RX_RING_SIZE;
+  struct rx_desc *recv_desc = &rx_ring[tail];
+  while(recv_desc->status & E1000_RXD_STAT_DD){
+    if(recv_desc->length > MBUF_SIZE){
+      panic("e1000 recv: packet too large");
+    }
+    rx_mbufs[tail]->len = recv_desc->length;
+    net_rx(rx_mbufs[tail]);
+    //In net_rx, the mbuf will be freed, so we need to allocate a new mbuf to take the place of the old one
+    rx_mbufs[tail] = mbufalloc(0);
+    if(rx_mbufs[tail] == 0){
+      panic("e1000 recv: mbufalloc failed");
+    }
+    recv_desc->addr = (uint64)rx_mbufs[tail]->head;
+    recv_desc->status = 0;
+    tail = (tail + 1) % RX_RING_SIZE;
+    recv_desc = &rx_ring[tail];
+  }
+  regs[E1000_RDT] = (tail + RX_RING_SIZE - 1) % RX_RING_SIZE;
 }
 
 void

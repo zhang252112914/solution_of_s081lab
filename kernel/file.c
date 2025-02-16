@@ -16,7 +16,7 @@
 struct devsw devsw[NDEV];
 struct {
   struct spinlock lock;
-  struct file file[NFILE];
+  struct file file[NFILE];  // os 中的文件实际上是有限的
 } ftable;
 
 void

@@ -200,8 +200,10 @@ ialloc(uint dev, short type)
   struct dinode *dip;
 
   for(inum = 1; inum < sb.ninodes; inum++){
-    bp = bread(dev, IBLOCK(inum, sb));
-    dip = (struct dinode*)bp->data + inum%IPB;
+    bp = bread(dev, IBLOCK(inum, sb));  // bread means get a block (not only from buffer cache, but also could from disk)
+                                        // and here IBLOCK get a nunmber of the block where the dinode stay
+                                        // the bread ensure the block where dinode stays is in the buffer cache
+    dip = (struct dinode*)bp->data + inum%IPB;   //so here we can get the inode pointer
     if(dip->type == 0){  // a free inode
       memset(dip, 0, sizeof(*dip));
       dip->type = type;
@@ -266,7 +268,7 @@ iget(uint dev, uint inum)
   ip->dev = dev;
   ip->inum = inum;
   ip->ref = 1;
-  ip->valid = 0;
+  ip->valid = 0;    // delay the read from disk(when it truly needed, generally when acquire the lock) 
   release(&itable.lock);
 
   return ip;
@@ -343,7 +345,8 @@ iput(struct inode *ip)
 
     release(&itable.lock);
 
-    itrunc(ip);
+    itrunc(ip);     // discard the inode's content
+                    // truncate the file to zero bytes, freeing the data blocks; sets the inode type to 0 (unallocated); and writes the inode to disk
     ip->type = 0;
     iupdate(ip);
     ip->valid = 0;
@@ -374,7 +377,7 @@ iunlockput(struct inode *ip)
 
 // Return the disk block address of the nth block in inode ip.
 // If there is no such block, bmap allocates one.
-static uint
+static uint // get the block number
 bmap(struct inode *ip, uint bn)
 {
   uint addr, *a;
@@ -650,7 +653,7 @@ namex(char *path, int nameiparent, char *name)
       iunlockput(ip);
       return 0;
     }
-    iunlockput(ip);
+    iunlockput(ip);   //avoid the next and the ip is the same inode which will cause the deadlock, so we need to release the lock of ip
     ip = next;
   }
   if(nameiparent){

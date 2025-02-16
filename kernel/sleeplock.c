@@ -18,6 +18,7 @@ initsleeplock(struct sleeplock *lk, char *name)
   lk->pid = 0;
 }
 
+//sleep when the resoruces is being ouccupied
 void
 acquiresleep(struct sleeplock *lk)
 {
