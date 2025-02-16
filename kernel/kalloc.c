@@ -18,15 +18,19 @@ struct run {
   struct run *next;
 };
 
-struct {
+struct kmem {
   struct spinlock lock;
   struct run *freelist;
-} kmem;
+};
+
+struct kmem kmem_array[NCPU];
 
 void
 kinit()
 {
-  initlock(&kmem.lock, "kmem");
+  for(int i = 0; i < NCPU; i++){
+    initlock(&kmem_array[i].lock, "kmem");
+  }
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -56,10 +60,34 @@ kfree(void *pa)
 
   r = (struct run*)pa;
 
-  acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  release(&kmem.lock);
+  push_off(); // disable interrupts when acquire the cpu_id
+  int current_cpu = cpuid();
+  struct kmem *current_kmem = &kmem_array[current_cpu];  //需要深复制
+  acquire(&current_kmem->lock);
+  r->next = current_kmem->freelist;  //头插法
+  current_kmem->freelist = r;
+  release(&current_kmem->lock);
+  pop_off();
+}
+
+// Steal one page from other CPUs.
+struct run*
+ksteal(int cpuid)
+{
+  struct run *r = 0;
+  for(int i = 0; i < NCPU; i++){
+    if(i == cpuid) continue;
+    struct kmem *current_kmem = &kmem_array[i];
+    acquire(&current_kmem->lock);
+    r = current_kmem->freelist;
+    if(r){
+      current_kmem->freelist = r->next;
+      release(&current_kmem->lock);
+      return r;
+    }
+    release(&current_kmem->lock);
+  }
+  return 0;
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -69,13 +97,22 @@ void *
 kalloc(void)
 {
   struct run *r;
+  push_off(); // disable interrupts when acquire the cpu_id
+  int current_cpu = cpuid();
+  struct kmem *current_kmem = &kmem_array[current_cpu];
 
-  acquire(&kmem.lock);
-  r = kmem.freelist;
-  if(r)
-    kmem.freelist = r->next;
-  release(&kmem.lock);
+  acquire(&current_kmem->lock);
+  r = current_kmem->freelist;
+  if(r){
+    current_kmem->freelist = r->next;
+  }
+  else{
+    r = ksteal(current_cpu); // input cpuid to avoid deadlock
+  }
 
+  release(&current_kmem->lock);
+  pop_off();
+  
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
