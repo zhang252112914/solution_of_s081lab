@@ -283,6 +283,39 @@ create(char *path, short type, short major, short minor)
   return ip;
 }
 
+struct inode*
+recursive_reach(struct inode* root){
+  uint inums[SYMLINK_DEPTH];
+  int i, j;
+  char target[MAXPATH];
+
+  for(i = 0; i < SYMLINK_DEPTH; i++){
+    inums[i] = root->inum;
+    if(readi(root, 0, (uint64)target, 0, MAXPATH) <= 0){
+      iunlockput(root);
+      return  0;
+    }
+    iunlockput(root);
+
+    if((root = namei(target)) == 0){
+      return 0;
+    }
+
+    for(j = 0; j < i; j++){
+      if(inums[j] == root->inum){
+        return 0;
+      }
+    }
+
+    ilock(root);
+    if(root->type != T_SYMLINK){
+      return root;
+    }
+  }
+  iunlockput(root);
+  return 0;
+}
+
 uint64
 sys_open(void)
 {
@@ -320,6 +353,13 @@ sys_open(void)
     iunlockput(ip);
     end_op();
     return -1;
+  }
+
+  if(ip->type == T_SYMLINK && (omode & O_NOFOLLOW) == 0){
+    if((ip = recursive_reach(ip)) == 0){
+      end_op();
+      return -1;
+    }
   }
 
   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
@@ -482,5 +522,30 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+uint64
+sys_symlink(void)
+{
+  char target[MAXPATH], path[MAXPATH];
+  struct inode *ip;
+  int n;
+  if((n = argstr(0, target, MAXPATH)) < 0 || (n = argstr(1, path, MAXPATH)) < 0)
+    return -1;
+
+  begin_op();
+  if((ip = create(path, T_SYMLINK, 0, 0)) == 0){
+    end_op();
+    return -1;
+  }
+
+  if(writei(ip, 0, (uint64)target, 0, n) != n){
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+  iunlockput(ip);
+  end_op();
   return 0;
 }

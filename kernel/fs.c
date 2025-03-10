@@ -393,8 +393,37 @@ bmap(struct inode *ip, uint bn)
       ip->addrs[NDIRECT] = addr = balloc(ip->dev);
     bp = bread(ip->dev, addr);
     a = (uint*)bp->data;
-    if((addr = a[bn]) == 0){
+    
+    if((addr = a[bn]) == 0){ // if block haven't been allocated
       a[bn] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    return addr;
+  }
+
+  bn -= NINDIRECT;
+  if(bn < NDOUINDIRECT){
+    uint indi_bn = bn / NINDIRECT;
+    uint indi_off = bn % NINDIRECT;
+    //Load douindirect block
+    if((addr = ip->addrs[NDIRECT + 1]) == 0)
+      ip->addrs[NDIRECT + 1] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+
+    //Load indirect block
+    if((addr = a[indi_bn]) == 0){
+      a[indi_bn] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    
+    //Load direct block
+    if((addr = a[indi_off]) == 0){
+      a[indi_off] = addr = balloc(ip->dev);
       log_write(bp);
     }
     brelse(bp);
@@ -430,6 +459,27 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
+  }
+
+  if(ip->addrs[NDIRECT+1]){
+    struct buf *douindirect_bp = bread(ip->dev, ip->addrs[NDIRECT + 1]);
+    uint *douindirect_a = (uint*)douindirect_bp->data;
+    for(i = 0; i < NINDIRECT; i++){
+      if(douindirect_a[i]){
+        bp = bread(ip->dev, douindirect_a[i]);
+        a = (uint*)bp->data;
+        for(j = 0; j < NINDIRECT; j++){
+          if(a[j])
+            bfree(ip->dev, a[j]);
+        }
+        brelse(bp);
+        bfree(ip->dev, douindirect_a[i]);
+        douindirect_a[i] = 0;
+      }
+    }
+    brelse(douindirect_bp);
+    bfree(ip->dev, ip->addrs[NDIRECT + 1]);
+    ip->addrs[NDIRECT + 1] = 0;
   }
 
   ip->size = 0;
